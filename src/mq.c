@@ -451,7 +451,7 @@ MessageQueue_send(MessageQueue *self, PyObject *args, PyObject *keywords) {
 
     // self->max_message_size is a ulong while user_msg.len is a long. Casting the latter to
     // unsigned long is safe because the length will never be negative.
-    if ((size_t)user_msg.len > (offsetof(struct queue_message, message) + self->max_message_size)) {
+    if ((size_t)user_msg.len > self->max_message_size) {
         PyErr_Format(PyExc_ValueError,
             "The message length exceeds queue's max_message_size (%lu)",
             self->max_message_size);
