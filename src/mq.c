@@ -451,7 +451,7 @@ MessageQueue_send(MessageQueue *self, PyObject *args, PyObject *keywords) {
 
     // self->max_message_size is a ulong while user_msg.len is a long. Casting the latter to
     // unsigned long is safe because the length will never be negative.
-    if ((size_t)user_msg.len > self->max_message_size) {
+    if ((unsigned long)user_msg.len > self->max_message_size) {
         PyErr_Format(PyExc_ValueError,
             "The message length exceeds queue's max_message_size (%lu)",
             self->max_message_size);
@@ -461,8 +461,7 @@ MessageQueue_send(MessageQueue *self, PyObject *args, PyObject *keywords) {
     if (py_block && PyObject_Not(py_block))
         flags |= IPC_NOWAIT;
 
-    size_t p_msg_size = offsetof(struct queue_message, message) + user_msg.len;
-    p_msg = (struct queue_message *)malloc(p_msg_size);
+    p_msg = (struct queue_message *)malloc(offsetof(struct queue_message, message) + user_msg.len);
 
     DPRINTF("p_msg is %p\n", p_msg);
 
@@ -477,7 +476,7 @@ MessageQueue_send(MessageQueue *self, PyObject *args, PyObject *keywords) {
     Py_BEGIN_ALLOW_THREADS
     DPRINTF("Calling msgsnd(), id=%ld, p_msg=%p, p_msg->type=%ld, length=%lu, flags=0x%x\n",
             (long)self->id, p_msg, p_msg->type, user_msg.len, flags);
-    rc = msgsnd(self->id, p_msg, p_msg_size, flags);
+    rc = msgsnd(self->id, p_msg, (size_t)user_msg.len, flags);
     Py_END_ALLOW_THREADS
 
     if (-1 == rc) {
@@ -556,7 +555,7 @@ MessageQueue_receive(MessageQueue *self, PyObject *args, PyObject *keywords) {
     p_msg->type = type;
 
     Py_BEGIN_ALLOW_THREADS;
-    rc = msgrcv(self->id, p_msg, msg_buffer_size,
+    rc = msgrcv(self->id, p_msg, (size_t)self->max_message_size,
                 type, flags);
     Py_END_ALLOW_THREADS;
 
@@ -592,8 +591,9 @@ MessageQueue_receive(MessageQueue *self, PyObject *args, PyObject *keywords) {
         goto error_return;
     }
     // Set the received size to python message buffer bytes
-    Py_SET_SIZE(py_msg_buffer, rc);
-    msg_buffer[rc] = '\0';
+    size_t received_size = offsetof(struct queue_message, message) + (size_t)rc;
+    Py_SET_SIZE(py_msg_buffer, received_size);
+    msg_buffer[received_size] = '\0';
 
     // Create python memory view
     PyObject *py_msg_buffer_view = PyMemoryView_FromObject(py_msg_buffer);
@@ -603,7 +603,7 @@ MessageQueue_receive(MessageQueue *self, PyObject *args, PyObject *keywords) {
     }
     Py_DECREF(py_msg_buffer);
     py_msg_buffer = NULL;
-    PyObject* py_message = PySequence_GetSlice(py_msg_buffer_view, offsetof(struct queue_message, message), rc);
+    PyObject* py_message = PySequence_GetSlice(py_msg_buffer_view, offsetof(struct queue_message, message), received_size);
     Py_DECREF(py_msg_buffer_view);
     if (py_message == NULL) {
         PyErr_SetString(PyExc_MemoryError, "Out of memory");
