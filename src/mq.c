@@ -595,7 +595,7 @@ MessageQueue_receive(MessageQueue *self, PyObject *args, PyObject *keywords) {
     Py_SET_SIZE(py_msg_buffer, received_size);
     msg_buffer[received_size] = '\0';
 
-    // Create python memory view
+    // Create python memory view to prevent memory reallocation
     PyObject *py_msg_buffer_view = PyMemoryView_FromObject(py_msg_buffer);
     if (py_msg_buffer_view == NULL) {
         PyErr_SetString(PyExc_MemoryError, "Out of memory");
